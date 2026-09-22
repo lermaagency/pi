@@ -31,6 +31,7 @@ export class ExperimentalChatView {
 	#streaming: AssistantMessageComponent | undefined;
 	#indicator: StatusIndicator | undefined;
 	#working = false;
+	#workingMessage = "";
 
 	constructor(ui: TUI, cwd: string) {
 		this.#ui = ui;
@@ -50,7 +51,13 @@ export class ExperimentalChatView {
 			}
 		}
 		this.#syncQueues(snapshot.queues);
-		this.#setWorking(snapshot.operation !== null);
+		const running = (snapshot.operation?.runningTools ?? [])
+			.filter((tool) => tool.status === "running")
+			.map((tool) => tool.toolName);
+		this.#setWorking(
+			snapshot.operation !== null,
+			running.length === 0 ? "Working... (esc to abort)" : `Running ${running.join(", ")}... (esc to abort)`,
+		);
 		this.transcript.invalidate();
 		this.pendingMessages.invalidate();
 		this.status.invalidate();
@@ -156,7 +163,8 @@ export class ExperimentalChatView {
 			toolCallId,
 			args ?? {},
 			{},
-			ExperimentalChatView.#renderers[toolName],
+			// Tools without a renderer get the collapsible fallback instead of raw text.
+			ExperimentalChatView.#renderers[toolName] ?? {},
 			this.#ui,
 			this.#cwd,
 		);
@@ -170,14 +178,21 @@ export class ExperimentalChatView {
 		this.transcript.addChild(new Text(text, 1, 0));
 	}
 
-	#setWorking(working: boolean): void {
-		if (working === this.#working) return;
+	#setWorking(working: boolean, message: string): void {
+		if (working === this.#working) {
+			if (working && message !== this.#workingMessage) {
+				this.#workingMessage = message;
+				this.#indicator?.setMessage(message);
+			}
+			return;
+		}
 		this.#working = working;
+		this.#workingMessage = message;
 		this.#indicator?.dispose();
 		this.#indicator = undefined;
 		this.status.clear();
 		if (working) {
-			this.#indicator = new WorkingStatusIndicator(this.#ui, "Working... (esc to abort)");
+			this.#indicator = new WorkingStatusIndicator(this.#ui, message);
 			this.status.addChild(this.#indicator);
 		}
 	}

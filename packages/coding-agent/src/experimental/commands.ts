@@ -70,8 +70,14 @@ async function runClientCommand(command: ClientCommand): Promise<void> {
 		return;
 	}
 	let streamedText = false;
+	if (command.prompt !== undefined) {
+		console.error("one-shot prompt: the answer streams to stdout, tool progress to stderr");
+	}
 	const result = await runClient(command, {
 		onEvent(event) {
+			// Tool progress goes to stderr so a long run is never silent and stdout stays the answer.
+			if (event.type === "tool_start") console.error(`→ ${event.toolName}`);
+			if (event.type === "tool_end") console.error(`${event.isError ? "✗" : "✓"} ${event.toolName}`);
 			if (event.type !== "message_update" || event.frame?.type !== "text_delta") return;
 			streamedText = true;
 			process.stdout.write(event.frame.delta);
