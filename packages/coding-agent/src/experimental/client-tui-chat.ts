@@ -1,6 +1,7 @@
 import type { AgentMessage, Entry, LaneSnapshot } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { Container, Spacer, Text, TruncatedText, type TUI } from "@earendil-works/pi-tui";
+import { createCompactToolRenderers } from "../core/tools/renderers/compact.ts";
 import { createAllToolRenderers } from "../core/tools/renderers/index.ts";
 import { AssistantMessageComponent } from "../modes/interactive/components/assistant-message.ts";
 import { type StatusIndicator, WorkingStatusIndicator } from "../modes/interactive/components/status-indicator.ts";
@@ -20,6 +21,16 @@ function userMessageText(message: AgentMessage): string {
 /** Snapshot-driven transcript used by the service-only experimental presentation. */
 export class ExperimentalChatView {
 	static readonly #renderers: Record<string, ToolRenderers> = createAllToolRenderers();
+	static readonly #compact = new Map<string, ToolRenderers>();
+
+	static #compactRenderers(toolName: string): ToolRenderers {
+		let renderers = ExperimentalChatView.#compact.get(toolName);
+		if (renderers === undefined) {
+			renderers = createCompactToolRenderers(toolName);
+			ExperimentalChatView.#compact.set(toolName, renderers);
+		}
+		return renderers;
+	}
 
 	readonly transcript = new Container();
 	readonly pendingMessages = new Container();
@@ -32,6 +43,7 @@ export class ExperimentalChatView {
 	#indicator: StatusIndicator | undefined;
 	#working = false;
 	#workingMessage = "";
+	#toolsExpanded = false;
 
 	constructor(ui: TUI, cwd: string) {
 		this.#ui = ui;
@@ -58,9 +70,20 @@ export class ExperimentalChatView {
 			snapshot.operation !== null,
 			running.length === 0 ? "Working... (esc to abort)" : `Running ${running.join(", ")}... (esc to abort)`,
 		);
-		this.transcript.invalidate();
-		this.pendingMessages.invalidate();
+		// Components update themselves when their entry changes; invalidating the whole
+		// transcript here rebuilt every finished tool on each streaming update.
 		this.status.invalidate();
+	}
+
+	/** Expand or collapse every tool card, now and for tools rendered later. */
+	setToolsExpanded(expanded: boolean): void {
+		this.#toolsExpanded = expanded;
+		for (const component of this.#tools.values()) component.setExpanded(expanded);
+		this.#ui.requestRender();
+	}
+
+	get toolsExpanded(): boolean {
+		return this.#toolsExpanded;
 	}
 
 	refreshTheme(snapshot: LaneSnapshot): void {
@@ -163,11 +186,12 @@ export class ExperimentalChatView {
 			toolCallId,
 			args ?? {},
 			{},
-			// Tools without a renderer get the collapsible fallback instead of raw text.
-			ExperimentalChatView.#renderers[toolName] ?? {},
+			// Tools without a bespoke renderer get the compact one-row presentation.
+			ExperimentalChatView.#renderers[toolName] ?? ExperimentalChatView.#compactRenderers(toolName),
 			this.#ui,
 			this.#cwd,
 		);
+		if (this.#toolsExpanded) component.setExpanded(true);
 		this.transcript.addChild(component);
 		this.#tools.set(toolCallId, component);
 		return component;

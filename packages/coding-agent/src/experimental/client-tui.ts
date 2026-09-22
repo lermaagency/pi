@@ -133,6 +133,10 @@ export class ExperimentalClientTui implements Component {
 		this.#chatInput.onCtrlD = finish;
 		this.#chatInput.onAction("app.clear", finish);
 		this.#chatInput.onAction("app.model.select", () => void this.#executeSlashCommand("model", ""));
+		this.#chatInput.onAction("app.tools.expand", () => {
+			const view = this.#chatView;
+			if (view !== undefined) view.setToolsExpanded(!view.toolsExpanded);
+		});
 		this.#chatInput.onAction("app.message.followUp", () => {
 			const text = this.#chatInput.getText().trim();
 			if (text.length === 0) return;

@@ -183,6 +183,7 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	markExecutionStarted(): void {
+		if (this.executionStarted) return;
 		this.executionStarted = true;
 		this.updateDisplay();
 		this.ui.requestRender();
