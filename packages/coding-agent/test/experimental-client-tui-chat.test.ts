@@ -1,7 +1,8 @@
 import type { LaneSnapshot } from "@earendil-works/pi-agent-core";
 import type { TUI } from "@earendil-works/pi-tui";
-import { beforeAll, describe, expect, test } from "vitest";
+import { beforeAll, describe, expect, test, vi } from "vitest";
 import { ExperimentalChatView } from "../src/experimental/client-tui-chat.ts";
+import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
@@ -92,8 +93,16 @@ describe("experimental chat view tool presentation", () => {
 	test("re-applying an unchanged snapshot does not rebuild finished components", () => {
 		const view = new ExperimentalChatView(createFakeTui(), process.cwd());
 		view.apply(snapshot());
-		const before = view.transcript.children;
-		view.apply(snapshot());
-		expect(view.transcript.children).toEqual(before);
+		const invalidate = vi.spyOn(ToolExecutionComponent.prototype, "invalidate");
+		const updateResult = vi.spyOn(ToolExecutionComponent.prototype, "updateResult");
+		try {
+			view.apply(snapshot());
+			expect(invalidate.mock.calls.length).toBe(0);
+			expect(updateResult.mock.calls.length).toBe(0);
+		} finally {
+			invalidate.mockRestore();
+			updateResult.mockRestore();
+			view.dispose();
+		}
 	});
 });

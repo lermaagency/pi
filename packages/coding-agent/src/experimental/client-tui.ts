@@ -226,6 +226,7 @@ export class ExperimentalClientTui implements Component {
 	refreshTheme(): void {
 		const snapshot = this.#laneSnapshot();
 		if (snapshot !== undefined) this.#chatView?.refreshTheme(snapshot);
+		this.#layoutRoot.invalidate();
 		this.#rebuild();
 	}
 
@@ -399,7 +400,8 @@ export class ExperimentalClientTui implements Component {
 			this.#chatInput.focused = !this.#busy;
 			this.#editorContainer.addChild(this.#chatInput);
 		}
-		this.#layoutRoot.invalidate();
+		// Setters invalidate the components they change. Preserve transcript caches
+		// across status/selector updates; full invalidation is only for theme/resize.
 		this.#requestRender();
 	}
 
@@ -505,7 +507,8 @@ export class ExperimentalClientTui implements Component {
 		this.#laneUnsubscribe = feature.transcript.state.subscribe((value) => {
 			if (value.snapshot === null) return;
 			view.apply(value.snapshot);
-			this.#rebuild();
+			this.#footerComponent.setText(theme.fg("dim", this.#footer()));
+			this.#requestRender();
 		});
 		if (feature.transcript.state.value?.snapshot === null || feature.transcript.state.value?.snapshot === undefined) {
 			await this.#closeLane();

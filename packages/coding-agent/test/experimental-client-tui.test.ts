@@ -41,6 +41,8 @@ import {
 	type SessionSummary,
 } from "../src/experimental/services/sessions.ts";
 import { Transcript, type TranscriptState } from "../src/experimental/services/transcript.ts";
+import { AssistantMessageComponent } from "../src/modes/interactive/components/assistant-message.ts";
+import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 
 const serverId = "00000000-0000-4000-8000-000000000001";
@@ -107,6 +109,7 @@ describe("experimental client TUI", () => {
 		["new", { command: "client" as const }, "two", 1],
 		["continued", { command: "client" as const, continue: true }, "one", 0],
 		["plugin-selected", { command: "client" as const, pluginPackages: ["./example-plugin"] }, "two", 1],
+		["performance", { command: "client" as const }, "two", 1],
 	] as const)(
 		"opens a %s Session directly and exercises the full lifecycle only for a new Session",
 		async (kind, command, sessionId, creates) => {
@@ -363,6 +366,132 @@ describe("experimental client TUI", () => {
 				expect(component.render(80).join("\n")).not.toContain("Experimental Sessions");
 				expect(component.render(80).join("\n")).not.toContain("Experimental Models");
 
+				if (kind === "performance") {
+					// Exercise the replicated subscription and client layout, not just the chat view.
+					const history = laneSnapshot();
+					for (let index = 0; index < 300; index++) {
+						history.transcript.push({
+							id: `assistant-${index}`,
+							parentId: null,
+							seq: index * 2,
+							timestamp: index,
+							type: "message",
+							message: {
+								role: "assistant",
+								content: [
+									{
+										type: "text",
+										text: "## Assessment\n\nMeasured evidence with **citations** and limitations.\n\n".repeat(
+											12,
+										),
+									},
+									{
+										type: "toolCall",
+										id: `call-${index}`,
+										name: "assess_brand_standing",
+										arguments: { brand_id: `brand-${index}` },
+									},
+								],
+								api: "test",
+								provider: "test",
+								model: "one",
+								usage: history.stats.usage,
+								stopReason: "toolUse",
+								timestamp: index,
+							},
+						});
+						history.transcript.push({
+							id: `result-${index}`,
+							parentId: `assistant-${index}`,
+							seq: index * 2 + 1,
+							timestamp: index,
+							type: "message",
+							message: {
+								role: "toolResult",
+								toolCallId: `call-${index}`,
+								toolName: "assess_brand_standing",
+								content: [{ type: "text", text: `Summary ${index}\n${"Detailed evidence\n".repeat(100)}` }],
+								isError: false,
+								timestamp: index,
+							},
+						});
+					}
+					publishReplacement(transcriptState, { snapshot: history as LaneTranscriptSnapshot, event: null });
+					await vi.waitFor(() => expect(component.render(120).join("\n")).toContain("Summary 299"));
+					const invalidations = vi.spyOn(ToolExecutionComponent.prototype, "invalidate");
+					const assistantUpdates = vi.spyOn(AssistantMessageComponent.prototype, "updateContent");
+					const samples: number[] = [];
+					let started = 0;
+					requestRender.mockImplementation(() => {
+						component.render(120);
+						if (started > 0) samples.push(performance.now() - started);
+					});
+					try {
+						for (let index = 0; index < 40; index++) {
+							const previous = samples.length;
+							transcriptState.state.snapshot!.stats.messageCount = 600 + index;
+							started = performance.now();
+							transcriptState.publish(BACKGROUND_CONTEXT);
+							await vi.waitFor(() => expect(samples.length).toBeGreaterThan(previous));
+						}
+						started = 0;
+						if (process.env.PI_TUI_BENCH === "1") {
+							const sorted = samples.slice(5).sort((a, b) => a - b);
+							console.log(
+								JSON.stringify({
+									historyEntries: 600,
+									updates: samples.length,
+									medianMs: sorted[Math.floor(sorted.length / 2)],
+									p95Ms: sorted[Math.floor(sorted.length * 0.95)],
+									toolInvalidations: invalidations.mock.calls.length,
+									assistantUpdates: assistantUpdates.mock.calls.length,
+								}),
+							);
+						}
+						expect(invalidations.mock.calls.length).toBe(0);
+						expect(assistantUpdates.mock.calls.length).toBe(0);
+						expect(component.render(120).join("\n")).toContain("639 messages");
+						emitTranscriptEvent({ type: "run_start", lane: "main", runId: "stream", startedAt: 1000 });
+						for (let index = 0; index < 10; index++) {
+							emitTranscriptEvent({
+								type: "message_update",
+								lane: "main",
+								runId: "stream",
+								message: {
+									role: "assistant",
+									content: [{ type: "text", text: `Live response ${index}` }],
+									api: "test",
+									provider: "test",
+									model: "one",
+									usage: history.stats.usage,
+									stopReason: "stop",
+									timestamp: 1000,
+								},
+							});
+							await vi.waitFor(() =>
+								expect(component.render(120).join("\n")).toContain(`Live response ${index}`),
+							);
+						}
+						expect(invalidations.mock.calls.length).toBe(0);
+						expect(assistantUpdates.mock.calls.length).toBe(10);
+						expect(assistantUpdates.mock.calls.every(([message]) => message.timestamp === 1000)).toBe(true);
+						component.handleInput("typing while streaming");
+						expect(component.render(120).join("\n")).toContain("typing while streaming");
+						// Existing key dispatch, resizing and theme refresh must still redraw correctly.
+						component.handleInput("\u000f");
+						expect(component.render(80).join("\n")).toContain('"brand_id": "brand-299"');
+						component.handleInput("\u000f");
+						expect(component.render(80).join("\n")).not.toContain('"brand_id": "brand-299"');
+						component.refreshTheme();
+						expect(component.render(120).join("\n")).toContain("Summary 299");
+					} finally {
+						invalidations.mockRestore();
+						assistantUpdates.mockRestore();
+						requestRender.mockReset();
+					}
+					return;
+				}
+
 				// Startup selection is the only behavior specific to continue and plugin-selected Sessions.
 				if (kind !== "new") return;
 
@@ -409,6 +538,11 @@ describe("experimental client TUI", () => {
 				component.handleInput("\r");
 				await vi.waitFor(() => expect(component.render(80).join("\n")).toContain("Select model:"));
 				component.handleInput("\u001b[B");
+				// A transcript publication must not reconstruct the selector and lose its highlighted row.
+				const rendersBeforeUpdate = requestRender.mock.calls.length;
+				transcriptState.state.snapshot!.stats.messageCount += 1;
+				transcriptState.publish(BACKGROUND_CONTEXT);
+				await vi.waitFor(() => expect(requestRender.mock.calls.length).toBeGreaterThan(rendersBeforeUpdate));
 				component.handleInput("\r");
 				await vi.waitFor(() =>
 					expect(select).toHaveBeenCalledWith({ provider: "test", modelId: "two" }, expect.anything()),

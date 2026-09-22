@@ -8,6 +8,8 @@ export class TruncatedText implements Component {
 	private text: string;
 	private paddingX: number;
 	private paddingY: number;
+	private cachedWidth?: number;
+	private cachedLines?: string[];
 
 	constructor(text: string, paddingX: number = 0, paddingY: number = 0) {
 		this.text = text;
@@ -16,10 +18,14 @@ export class TruncatedText implements Component {
 	}
 
 	invalidate(): void {
-		// No cached state to invalidate currently
+		this.cachedWidth = undefined;
+		this.cachedLines = undefined;
 	}
 
 	render(width: number): string[] {
+		// Text and padding are fixed for this component. Reuse the ANSI-aware
+		// truncation on ordinary frames; a resize naturally misses this cache.
+		if (this.cachedWidth === width && this.cachedLines) return this.cachedLines;
 		const result: string[] = [];
 
 		// Empty line padded to width
@@ -60,6 +66,8 @@ export class TruncatedText implements Component {
 			result.push(emptyLine);
 		}
 
+		this.cachedWidth = width;
+		this.cachedLines = result;
 		return result;
 	}
 }
