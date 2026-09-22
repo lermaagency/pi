@@ -22,4 +22,20 @@ it("routes all GitHub Copilot GPT models through the Responses API", () => {
 	expect(gptModels.length).toBeGreaterThan(0);
 	expect(gptModels.every((model) => model.api === "openai-responses")).toBe(true);
 	expectTypeOf(GITHUB_COPILOT_MODELS["gpt-6-astra"].api).toEqualTypeOf<"openai-responses">();
+	// The bundled snapshot must also carry the generator's Responses metadata,
+	// rather than retaining the old Completions compatibility flags after regrouping.
+	expect(GITHUB_COPILOT_MODELS["gpt-6-astra"].compat).toEqual({
+		supportsOpenAIGrammarTools: true,
+		supportsMidConvoSystemMessages: true,
+		supportsAdditionalTools: true,
+	});
+	expect(GITHUB_COPILOT_MODELS["gpt-6-astra"].thinkingLevelMap).toEqual({
+		off: null,
+		minimal: null,
+		low: "low",
+		medium: "medium",
+		high: "high",
+		xhigh: "xhigh",
+		max: "max",
+	});
 });
