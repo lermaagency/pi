@@ -103,6 +103,7 @@ export class SessionWorkerManager {
 	>;
 	readonly #sessionDir: string;
 	readonly #model: { readonly provider?: string; readonly model: string } | undefined;
+	readonly #workerEntryUrl: URL | undefined;
 	readonly #workersBySession = new Map<string, WorkerRecord>();
 	readonly #workersByPeer = new Map<string, WorkerRecord>();
 	readonly #pending = new Map<string, PendingLaunch>();
@@ -124,10 +125,12 @@ export class SessionWorkerManager {
 		sessionDir: string,
 		model?: { readonly provider?: string; readonly model: string },
 		onWorkerCountChanged?: (count: number) => void,
+		workerEntryUrl?: URL,
 	) {
 		this.#coordinator = coordinator;
 		this.#sessionDir = sessionDir;
 		this.#model = model;
+		this.#workerEntryUrl = workerEntryUrl;
 		this.#onWorkerCountChanged = onWorkerCountChanged;
 		this.#removeListener = coordinator.onEvent((event) => this.#handleCoordinatorEvent(event));
 	}
@@ -474,6 +477,7 @@ export class SessionWorkerManager {
 				...(this.#model ?? {}),
 			};
 			child = spawnInternalProcess("session-worker", [JSON.stringify(options)], {
+				...(this.#workerEntryUrl === undefined ? {} : { entryUrl: this.#workerEntryUrl }),
 				env: {
 					[SESSION_WORKER_CONTROL_ADDRESS_ENV]: this.#coordinator.controlPath,
 					[SESSION_WORKER_CONTROL_TOKEN_ENV]: token,

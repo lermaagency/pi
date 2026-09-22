@@ -348,6 +348,8 @@ export interface StartServerOptions {
 	/** Explicit plugin packages. Undefined restores the logical server profile; an empty list clears it. */
 	readonly pluginPackages?: readonly string[];
 	readonly onRelayStatus?: (status: RadiusRelayHostStatus) => void;
+	/** Alternative Session worker entry module. Defaults to the coding agent's own session worker. */
+	readonly workerEntryUrl?: URL;
 }
 
 interface ResolvedSessionPlugins {
@@ -614,8 +616,12 @@ export async function startServer(options: StartServerOptions = {}): Promise<Run
 		startupLease = await ensureCoordinator(socketPath, controlPath);
 		coordinator = new CoordinatorConnection({ controlPath, endpoint: serverPath });
 		const sessionDir = resolveSessionDirectory(options.sessionDir);
-		workers = new SessionWorkerManager(coordinator, sessionDir, workerModel, (count) =>
-			lifetime.setWorkerCount(count),
+		workers = new SessionWorkerManager(
+			coordinator,
+			sessionDir,
+			workerModel,
+			(count) => lifetime.setWorkerCount(count),
+			options.workerEntryUrl,
 		);
 		backend = await startServerBackend(
 			{

@@ -29,6 +29,16 @@ export function createAgentController(lane: AgentLane): AgentControllerService {
 				? toOperationResponse(result.value)
 				: { accepted: false, operationId: operationId(result.error), error: toAgentError(result.error) };
 		},
+		async skill(request, context) {
+			const result = await lane.skill(
+				request.name,
+				request.additionalInstructions === null ? undefined : request.additionalInstructions,
+				context,
+			);
+			return result.ok
+				? toOperationResponse(result.value)
+				: { accepted: false, operationId: operationId(result.error), error: toAgentError(result.error) };
+		},
 		async requestAbort(operationId, context) {
 			const result = await lane.requestAbort(operationId, context);
 			if (!result.ok) throw new Error(result.error.message);

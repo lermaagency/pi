@@ -24,6 +24,11 @@ export type AgentQueueResponse =
 	| { accepted: true; entryId: string; error: null }
 	| { accepted: false; entryId: null; error: AgentOperationError };
 
+export interface AgentSkillRequest {
+	name: string;
+	additionalInstructions: string | null;
+}
+
 export interface AgentCompactionRequest {
 	customInstructions: string | null;
 }
@@ -38,6 +43,8 @@ export interface AgentNavigationRequest {
 /** Presentation-safe command facade over the worker-owned main AgentLane. */
 export interface AgentController {
 	prompt(request: AgentPromptRequest, context: Context): Promise<AgentOperationResponse>;
+	/** Deterministically invoke one application-provided skill by name. */
+	skill(request: AgentSkillRequest, context: Context): Promise<AgentOperationResponse>;
 	requestAbort(operationId: string, context: Context): Promise<void>;
 	steer(request: AgentPromptRequest, context: Context): Promise<AgentQueueResponse>;
 	followUp(request: AgentPromptRequest, context: Context): Promise<AgentQueueResponse>;
