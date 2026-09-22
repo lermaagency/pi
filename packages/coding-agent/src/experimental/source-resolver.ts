@@ -57,9 +57,25 @@ registerHooks({
 		if (matchedPattern) {
 			throw new Error(`Source runtime could not resolve ${specifier} through tsconfig path ${matchedPattern}`);
 		}
-		return nextResolve(specifier, context);
+		if (!isRelativeJavaScriptSpecifier(specifier)) return nextResolve(specifier, context);
+		// A workspace package that emits .js but is run from its .ts source keeps relative
+		// `.js` specifiers; fall back to the source file only when the emitted file is absent.
+		try {
+			return nextResolve(specifier, context);
+		} catch (error) {
+			if (!isModuleNotFound(error)) throw error;
+			return nextResolve(specifier.replace(/\.([mc]?)js$/, ".$1ts"), context);
+		}
 	},
 });
+
+function isRelativeJavaScriptSpecifier(specifier: string): boolean {
+	return /^\.\.?\//.test(specifier) && /\.[mc]?js$/.test(specifier);
+}
+
+function isModuleNotFound(error: unknown): boolean {
+	return typeof error === "object" && error !== null && "code" in error && error.code === "ERR_MODULE_NOT_FOUND";
+}
 
 function matchAlias(alias: SourceAlias, specifier: string): string | undefined {
 	if (!alias.pattern.includes("*")) return specifier === alias.pattern ? "" : undefined;
