@@ -56,8 +56,12 @@ export function createTranscriptService(
 		);
 	};
 
-	const onEvent = (event: HarnessEvent, context: Parameters<typeof state.publish>[0]): void => {
+	const onEvent = (rawEvent: HarnessEvent, context: Parameters<typeof state.publish>[0]): void => {
 		if (rebaseError !== undefined) throw rebaseError;
+		// Replicated state is JSON: an own `undefined` property (an error tool result's
+		// `details`) would enter the tracker's baseline without reaching the replica and
+		// break the operation stream on the next assignment. Drop such properties first.
+		const event = JSON.parse(JSON.stringify(rawEvent)) as HarnessEvent;
 		const forwarded = toLaneWatchEvent(event);
 		if (forwarded === undefined) return;
 		const snapshot = state.state.snapshot;
