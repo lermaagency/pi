@@ -832,6 +832,8 @@ export class NodeExecutionEnv implements ExecutionEnv {
 					const info = fileInfoFromStats(entryPath, await lstat(entryPath));
 					if (info.ok) infos.push(info.value);
 				} catch (error) {
+					// Removed between readdir and lstat (a lock file, a finished write): not listed.
+					if (isNodeError(error) && error.code === "ENOENT") continue;
 					return err(toFileError(error, entryPath));
 				}
 			}
