@@ -35,6 +35,8 @@ export function consumeInternalProcessRole(): InternalProcessRole | undefined {
 export interface InternalProcessSpawnOptions {
 	readonly entryUrl?: URL;
 	readonly env?: NodeJS.ProcessEnv;
+	/** The environment the child starts from; `env` is layered on top. Defaults to this process's. */
+	readonly baseEnv?: NodeJS.ProcessEnv;
 }
 
 /** Spawn a detached Pi-owned process consistently across Node and compiled Bun. */
@@ -57,7 +59,7 @@ export function spawnInternalProcess(
 			cwd: process.cwd(),
 			detached: true,
 			env: {
-				...process.env,
+				...(options.baseEnv ?? process.env),
 				...options.env,
 				[INTERNAL_PROCESS_ENV]: role,
 			},
