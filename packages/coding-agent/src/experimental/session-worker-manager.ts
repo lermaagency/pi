@@ -104,6 +104,7 @@ export class SessionWorkerManager {
 	readonly #sessionDir: string;
 	readonly #model: { readonly provider?: string; readonly model: string } | undefined;
 	readonly #workerEntryUrl: URL | undefined;
+	readonly #workerEnv: ((base: NodeJS.ProcessEnv) => NodeJS.ProcessEnv) | undefined;
 	readonly #workersBySession = new Map<string, WorkerRecord>();
 	readonly #workersByPeer = new Map<string, WorkerRecord>();
 	readonly #pending = new Map<string, PendingLaunch>();
@@ -126,11 +127,13 @@ export class SessionWorkerManager {
 		model?: { readonly provider?: string; readonly model: string },
 		onWorkerCountChanged?: (count: number) => void,
 		workerEntryUrl?: URL,
+		workerEnv?: (base: NodeJS.ProcessEnv) => NodeJS.ProcessEnv,
 	) {
 		this.#coordinator = coordinator;
 		this.#sessionDir = sessionDir;
 		this.#model = model;
 		this.#workerEntryUrl = workerEntryUrl;
+		this.#workerEnv = workerEnv;
 		this.#onWorkerCountChanged = onWorkerCountChanged;
 		this.#removeListener = coordinator.onEvent((event) => this.#handleCoordinatorEvent(event));
 	}
@@ -478,6 +481,9 @@ export class SessionWorkerManager {
 			};
 			child = spawnInternalProcess("session-worker", [JSON.stringify(options)], {
 				...(this.#workerEntryUrl === undefined ? {} : { entryUrl: this.#workerEntryUrl }),
+				// Pi's control variables below are layered over the filtered environment, so a
+				// filter cannot break the worker handshake.
+				...(this.#workerEnv === undefined ? {} : { baseEnv: this.#workerEnv(process.env) }),
 				env: {
 					[SESSION_WORKER_CONTROL_ADDRESS_ENV]: this.#coordinator.controlPath,
 					[SESSION_WORKER_CONTROL_TOKEN_ENV]: token,

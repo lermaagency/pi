@@ -350,6 +350,12 @@ export interface StartServerOptions {
 	readonly onRelayStatus?: (status: RadiusRelayHostStatus) => void;
 	/** Alternative Session worker entry module. Defaults to the coding agent's own session worker. */
 	readonly workerEntryUrl?: URL;
+	/**
+	 * The environment Session workers start from, derived from the server's own; defaults to
+	 * inheriting it unchanged. Lets an embedder keep credentials a worker must not hold out of
+	 * its environment. Pi's control variables are added on top.
+	 */
+	readonly workerEnv?: (base: NodeJS.ProcessEnv) => NodeJS.ProcessEnv;
 }
 
 interface ResolvedSessionPlugins {
@@ -622,6 +628,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Run
 			workerModel,
 			(count) => lifetime.setWorkerCount(count),
 			options.workerEntryUrl,
+			options.workerEnv,
 		);
 		backend = await startServerBackend(
 			{
