@@ -611,10 +611,17 @@ export class ExperimentalClientTui implements Component {
 		if (operation === null || operation === undefined || controller === undefined) return;
 		this.#status = `Aborting ${operation.id}…`;
 		this.#rebuild();
-		void controller.requestAbort(operation.id, BACKGROUND_CONTEXT).catch((error: unknown) => {
-			this.#status = `Error: ${message(error)}`;
-			this.#rebuild();
-		});
+		void controller.requestAbort(operation.id, BACKGROUND_CONTEXT).then(
+			(response) => {
+				if (response.outcome !== "not_current") return;
+				this.#status = `${operation.id} already ended.`;
+				this.#rebuild();
+			},
+			(error: unknown) => {
+				this.#status = `Error: ${message(error)}`;
+				this.#rebuild();
+			},
+		);
 	}
 
 	#selectedController(): AgentController | undefined {

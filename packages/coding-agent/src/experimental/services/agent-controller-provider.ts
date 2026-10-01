@@ -1,6 +1,7 @@
 import type { AgentLane, OperationResultRecord, SuspendedRun } from "@earendil-works/pi-agent-core";
 import type { ImageContent } from "@earendil-works/pi-ai";
 import type {
+	AgentAbortResponse,
 	AgentController as AgentControllerService,
 	AgentOperationError,
 	AgentOperationResponse,
@@ -39,9 +40,18 @@ export function createAgentController(lane: AgentLane): AgentControllerService {
 				? toOperationResponse(result.value)
 				: { accepted: false, operationId: operationId(result.error), error: toAgentError(result.error) };
 		},
-		async requestAbort(operationId, context) {
+		async requestAbort(operationId, context): Promise<AgentAbortResponse> {
 			const result = await lane.requestAbort(operationId, context);
-			if (!result.ok) throw new Error(result.error.message);
+			if (result.ok) {
+				return {
+					outcome: result.value.newlyRequested ? "requested" : "already_requested",
+					currentOperationId: result.value.operationId,
+				};
+			}
+			if (result.error._tag === "OperationMismatch") {
+				return { outcome: "not_current", currentOperationId: result.error.currentOperationId ?? null };
+			}
+			throw new Error(result.error.message);
 		},
 		steer: (request, context) => queue("steer", request, context),
 		followUp: (request, context) => queue("followUp", request, context),

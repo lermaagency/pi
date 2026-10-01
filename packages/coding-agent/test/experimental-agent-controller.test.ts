@@ -6,6 +6,7 @@ import {
 	type RunResult as HarnessRunResult,
 	InvalidMessage,
 	LaneBusy,
+	OperationMismatch,
 	UnknownSkill,
 	UnknownTemplate,
 } from "@earendil-works/pi-agent-core";
@@ -70,7 +71,7 @@ describe("AgentController service", () => {
 					{ serviceId: AgentController.id, member: "requestAbort", args: ["operation-1"] },
 					BACKGROUND_CONTEXT,
 				),
-			).resolves.toBeUndefined();
+			).resolves.toEqual({ outcome: "requested", currentOperationId: "operation-1" });
 			await expect(
 				host.services.invoke(
 					{ serviceId: AgentController.id, member: "steer", args: [{ message: "later", images: null }] },
@@ -163,6 +164,49 @@ describe("AgentController service", () => {
 			operationId: "operation-2",
 			error: { code: "provider", message: "failed" },
 		});
+	});
+
+	test("types an abort of an operation that no longer owns the lane", async () => {
+		const results = [
+			{ ok: true, value: { operationId: "operation-1", newlyRequested: false, steer: [], followUp: [] } },
+			{
+				ok: false,
+				error: new OperationMismatch({
+					lane: "main",
+					expectedOperationId: "operation-1",
+					lastOperationId: "operation-1",
+					message: 'Operation operation-1 does not own lane "main"',
+				}),
+			},
+			{
+				ok: false,
+				error: new OperationMismatch({
+					lane: "main",
+					expectedOperationId: "operation-1",
+					currentOperationId: "operation-2",
+					lastOperationId: "operation-1",
+					message: 'Operation operation-1 does not own lane "main"',
+				}),
+			},
+			{ ok: false, error: new Closed({ message: "closed" }) },
+		];
+		const controller = createAgentController({
+			requestAbort: async () => results.shift(),
+		} as unknown as AgentLane);
+
+		await expect(controller.requestAbort("operation-1", BACKGROUND_CONTEXT)).resolves.toEqual({
+			outcome: "already_requested",
+			currentOperationId: "operation-1",
+		});
+		await expect(controller.requestAbort("operation-1", BACKGROUND_CONTEXT)).resolves.toEqual({
+			outcome: "not_current",
+			currentOperationId: null,
+		});
+		await expect(controller.requestAbort("operation-1", BACKGROUND_CONTEXT)).resolves.toEqual({
+			outcome: "not_current",
+			currentOperationId: "operation-2",
+		});
+		await expect(controller.requestAbort("operation-1", BACKGROUND_CONTEXT)).rejects.toThrow("closed");
 	});
 
 	test.each(admissionErrors)("maps admission error %# to a stable response", async (error, code, operationId) => {

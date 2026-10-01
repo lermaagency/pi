@@ -24,6 +24,15 @@ export type AgentQueueResponse =
 	| { accepted: true; entryId: string; error: null }
 	| { accepted: false; entryId: null; error: AgentOperationError };
 
+/**
+ * `requested`: this call wrote the durable cancellation. `already_requested`: an earlier call did.
+ * `not_current`: the operation does not own the lane (it already ended, or another one is current),
+ * so there is nothing to abort; `currentOperationId` names the lane's open operation, if any.
+ */
+export type AgentAbortResponse =
+	| { outcome: "requested" | "already_requested"; currentOperationId: string }
+	| { outcome: "not_current"; currentOperationId: string | null };
+
 export interface AgentSkillRequest {
 	name: string;
 	additionalInstructions: string | null;
@@ -45,7 +54,7 @@ export interface AgentController {
 	prompt(request: AgentPromptRequest, context: Context): Promise<AgentOperationResponse>;
 	/** Deterministically invoke one application-provided skill by name. */
 	skill(request: AgentSkillRequest, context: Context): Promise<AgentOperationResponse>;
-	requestAbort(operationId: string, context: Context): Promise<void>;
+	requestAbort(operationId: string, context: Context): Promise<AgentAbortResponse>;
 	steer(request: AgentPromptRequest, context: Context): Promise<AgentQueueResponse>;
 	followUp(request: AgentPromptRequest, context: Context): Promise<AgentQueueResponse>;
 	nextRun(request: AgentPromptRequest, context: Context): Promise<AgentQueueResponse>;
